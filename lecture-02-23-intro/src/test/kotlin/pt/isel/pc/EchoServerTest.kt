@@ -4,6 +4,7 @@ import mu.KotlinLogging
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
 import pt.isel.pc.echoserver.EchoClient
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
@@ -11,16 +12,16 @@ import kotlin.concurrent.thread
 
 class EchoServerTest {
     companion object {
-        val nclients = 1000
+        val nclients = 5000
         private val logger = KotlinLogging.logger {}
     }
 
     @Test
     fun `check if no duplicate id's on multiple echo clients`() {
-        val ids = mutableSetOf<Int>()
+        val ids = ConcurrentHashMap.newKeySet<Int>()
         val threads = mutableListOf<Thread>()
         repeat(nclients) {
-            threads.add( thread {
+            threads.add( Thread.ofVirtual().start {
                 val client = EchoClient("127.0.0.1", 8080)
                 val res = client.contact()
 
@@ -28,7 +29,7 @@ class EchoServerTest {
                     logger.warn("$res: duplicated id!")
                 }
             })
-            TimeUnit.MICROSECONDS.sleep(100)
+            TimeUnit.NANOSECONDS.sleep(1)
         }
 
         for(t in threads) t.join()

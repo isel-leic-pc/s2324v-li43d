@@ -5,6 +5,7 @@ import pt.isel.pc.writeLine
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
 private fun main() {
@@ -13,7 +14,7 @@ private fun main() {
 }
 
 class EchoServer0(private val address: String, private val port : Int = 8080) {
-    private var clientId : Int = 1
+    private var clientId : Int = 0
     companion object {
         private val logger = KotlinLogging.logger {}
         private val EXIT_CMD = "bye"
@@ -25,9 +26,13 @@ class EchoServer0(private val address: String, private val port : Int = 8080) {
             serverSock.bind(InetSocketAddress(address, port));
             while(true) {
                 val clientSock = serverSock.accept();
-                logger.info("connected with ${clientSock.remoteSocketAddress}")
+                //logger.info("connected with ${clientSock.remoteSocketAddress}")
 
-                processClient(clientSock,    ++clientId )
+                val t = Thread {
+
+                    processClient(clientSock, ++clientId )
+                }
+                t.start()
 
             }
         }
