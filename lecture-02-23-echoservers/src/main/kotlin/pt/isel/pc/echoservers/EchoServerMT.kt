@@ -24,15 +24,24 @@ class EchoServerMT(private val address: String, private val port : Int = 8080) {
     fun run( ) {
         var clientId : Int = 0
         val serverSock = ServerSocket( )
+
+        // newClientId can't be declared here
+        // since it will be shared by all client threads
         //var newClientId = 0
         serverSock.use {
             serverSock.bind(InetSocketAddress(address, port))
             logger.info("Server ready!")
             while(true) {
                 val clientSock = serverSock.accept();
+
+                // note the value newClientId must be local
                 val newClientId = ++clientId
                 //logger.info("connected with ${clientSock.remoteSocketAddress}")
                 Thread {
+                    // on first version the code was the next commented line
+                    // processClient(clientSock, ++clientId )
+                    // bad choice, not thread safe, incrementes can be lost,
+                    // resulting in duplicated ids for clients
                     processClient(clientSock, newClientId )
                 }.start()
             }

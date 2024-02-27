@@ -1,11 +1,14 @@
 package pt.isel.pc
 
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
+
 class Account(private var balance : Long = 0) {
     companion object {
-        private val sharedMutex = Any()
+        private val sharedMutex = ReentrantLock()
     }
 
-    private val mutex = Any()
+    private val mutex = ReentrantLock()
 
     fun transfer0(other: Account, toTransfer : Long) : Boolean {
         if (balance < toTransfer) return false
@@ -15,8 +18,9 @@ class Account(private var balance : Long = 0) {
         return true
     }
 
+
     fun transfer1(other: Account, toTransfer : Long) : Boolean {
-        synchronized(sharedMutex) {
+        sharedMutex.withLock {
             if (balance < toTransfer) return false
             balance -= toTransfer
 
@@ -26,10 +30,10 @@ class Account(private var balance : Long = 0) {
     }
 
     fun transfer2(other: Account, toTransfer : Long) : Boolean {
-        synchronized(mutex) {
+        mutex.withLock {
             if (balance < toTransfer) return false
 
-            synchronized(other.mutex) {
+            other.mutex.withLock {
                 balance -= toTransfer
                 other.balance += toTransfer
             }
@@ -43,10 +47,9 @@ class Account(private var balance : Long = 0) {
         else
             Pair(other.mutex, mutex)
 
-        synchronized(mtx1) {
-            if (balance < toTransfer) return false
-
-            synchronized(mtx2) {
+        mtx1.withLock  {
+            mtx2.withLock {
+                if (balance < toTransfer) return false
                 balance -= toTransfer
                 other.balance += toTransfer
             }
@@ -55,7 +58,7 @@ class Account(private var balance : Long = 0) {
     }
 
     fun getBalance() : Long {
-        synchronized(mutex) {
+        mutex.withLock {
             return balance
         }
     }

@@ -29,6 +29,5 @@ class CounterTests {
         }
 
         assertEquals((NTHREADS*NITERS).toLong(),counter.get() )
-
     }
 }

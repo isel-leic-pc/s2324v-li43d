@@ -8,8 +8,8 @@ class ThreadTests {
     @Test
     fun `many platform threads launched`() {
         val threads = mutableListOf<Thread>()
-        repeat(100_000) {
-            val t = thread {
+        repeat(1_000_000) {
+            val t = Thread.ofPlatform().start() {
                 var count= 0
                 //println("hello from thread $it")
                 repeat(100) {
@@ -29,7 +29,7 @@ class ThreadTests {
     @Test
     fun `many virtual threads launched`() {
         val threads = mutableListOf<Thread>()
-        repeat(100_000) {
+        repeat(1_000_000) {
             val t = Thread.ofVirtual().start {
                 var count= 0
                 //println("hello from thread $it")
