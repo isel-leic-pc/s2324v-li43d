@@ -11,6 +11,7 @@ plugins {
 }
 
 rootProject.name = "s2324v-li43d"
-include("lecture-02-23-intro")
+include("lecture-02-23-echoservers")
+include("lecture-02-27-echoclient")
 include("utils")
- 
+include("lecture-02-27-hazards")
