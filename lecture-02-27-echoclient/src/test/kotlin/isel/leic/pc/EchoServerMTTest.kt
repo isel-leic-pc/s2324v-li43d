@@ -14,7 +14,7 @@ class EchoServerTest {
     }
 
     @Test
-    fun `check if no duplicate id's on multiple echo clients`() {
+    fun `check if there are no duplicate id's on multiple echo clients`() {
         // val ids = mutableSetOf<Int>() - bad choice, the set is not thread safe
         val ids = ConcurrentHashMap.newKeySet<Int>()
         val threads = mutableListOf<Thread>()

@@ -17,7 +17,7 @@ class Queue<T> {
     fun get() : T? {
         mutex.withLock {
             if (list.isEmpty()) return null
-            return list.get(0)
+            return list.removeFirst()
         }
     }
 
