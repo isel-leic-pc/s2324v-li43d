@@ -1,0 +1,7 @@
+#!/bin/bash
+
+nclients="${1:-1024}"
+
+for i in $(seq 1 $nclients); do
+  ./echo_cli $i &
+done

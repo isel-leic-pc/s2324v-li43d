@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 class QueueTests {
 
     @Test
-    fun `simple teste with a consumer and a producer`() {
+    fun `simple test with a consumer and a producer`() {
         val queue = Queue<Int>(1)
         var result : Int = 0
 
