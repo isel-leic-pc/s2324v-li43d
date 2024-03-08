@@ -10,22 +10,21 @@
 //   Carlos Martins, João Trindade, Duarte Nunes, Jorge Martins
 // 
 
-#include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>  // memset
 #include <assert.h>
-#include <unistd.h>
+#include <time.h>
 
 #include "uthread.h"
-#include "aio.h"
 #include "list.h"
-#include "log.h"
 
 //////////////////////////////////////
 //
 // UThread types and constants.
 //
+
+
 
 //
 // The data structure representing the layout of a thread's execution
@@ -50,15 +49,20 @@ typedef struct uthread_context {
 struct uthread {
 	uthread_context_t * context;
 	list_entry_t        entry;
-	void             (* function)(void *);   
+	void                (* function)(void *);   
 	void *              argument; 
 	void *              stack;
+	list_entry_t		joiners;
 };
 
 //
 // The fixed stack size of a user thread.
 //
-#define STACK_SIZE (4096)
+#define STACK_SIZE  4096
+
+
+
+
 
 //////////////////////////////////////
 //
@@ -122,62 +126,86 @@ void internal_exit(uthread_t * currThread, uthread_t * nextThread);
 __attribute__ ((visibility ("hidden")))
 void internal_cleanup(uthread_t * thread);
 
+/*
+
+// stuff to implement support sleep operation
+
+
+static list_entry_t sleepers_queue;	
+static long time_in_millis() {
+	struct timespec now;
+	
+	clock_gettime(CLOCK_REALTIME, &now);
+	return now.tv_sec*1000 + now.tv_nsec / 1000000;
+}
+	
+void ut_sleep(long millis) {
+	long duetime = time_in_millis() + millis;
+	running_thread->duetime = duetime;
+	
+	list_entry_t* curr = sleepers_queue.next;
+	while (curr != &sleepers_queue) {
+		uthread_t *tc = container_of(curr, uthread_t, entry);
+		if (tc->duetime >= duetime) break;
+		curr = curr->next;
+	}
+	insert_list_before(curr, &running_thread->entry);	
+	ut_deactivate();
+}
+
+void process_sleepers() {
+	long now = time_in_millis();
+	list_entry_t* curr = sleepers_queue.next;
+	while (curr != &sleepers_queue) {
+		uthread_t *tc = container_of(curr, uthread_t, entry);
+		if (tc->duetime > now) break;
+		list_entry_t* next = curr->next;
+		
+		remove_list_entry(curr);
+		ut_activate(container_of(curr, uthread_t, entry));
+		curr = next;
+	}
+}
+ 
+static inline uthread_t * extract_next_thread() {
+	uthread_t * next_thread = NULL;
+	do {
+		process_sleepers();
+		next_thread = is_list_empty(&ready_queue) ?
+			main_thread :
+			container_of(remove_list_first(&ready_queue), uthread_t, entry);
+	}
+	while(next_thread == main_thread && number_of_threads > 0);
+	return next_thread;
+}
+
+*/
 
 ////////////////////////////////////////
 //
 // UThread inline internal operations.
 //
 
+
 //
 // Returns and removes the first user thread in the ready queue. If the ready
 // queue is empty, the main thread is returned.
 //
 static inline uthread_t * extract_next_thread() {
-	return is_list_empty(&ready_queue) ?
-		main_thread :
-	    container_of(remove_list_first(&ready_queue), uthread_t, entry);
-}
-
-static inline aio_wait_state_t async_dispatch_with_timeout(int timeout) {
-	return aio_wait(timeout);
-}
-
-static aio_wait_state_t async_dispatch() {
-	
-	log("enter async_dispatch!");
-	aio_wait_state_t result = AIO_NONE;
-
-	
-	if (is_list_empty(&ready_queue)) {
-		while (result == AIO_NONE && aio_in_use() && is_list_empty(&ready_queue)) {
-			result = async_dispatch_with_timeout(INFINITE);
-		}
-
-		log("leave async_dispatch!");
-		
-	}
-	else {
-		if (aio_pending_count() > 10) result =  aio_wait(0);
-	}
-	return result;
+	return
+		is_list_empty(&ready_queue) ?
+			main_thread :
+			container_of(remove_list_first(&ready_queue), uthread_t, entry);
 }
 
 //
 // Schedule a new thread to run.
 //
 static inline void schedule () {
-	uthread_t * next_thread;
-	int res;
-	// process epoll activations
-	if ((res =async_dispatch()) == AIO_SYNCH_OPER) {
-	  // I/O immediately completed synchronously
-	  return;
-    }
-  
-    next_thread = extract_next_thread();
+	uthread_t * next_thread = extract_next_thread();
+	
 	context_switch(running_thread, next_thread);
 }
-
 
 
 ///////////////////////////////
@@ -191,16 +219,13 @@ static inline void schedule () {
 //
 void ut_init() {
 	init_list_head(&ready_queue);
-	if (aio_init() == -1) {
-		log("error creating epoll object!");
-	}
 }
 
 //
 // Cleanup all UThread internal resources.
 //
 void ut_end() {
-	aio_end();
+	/* (this function body was intentionally left empty) */
 }
 
 //
@@ -231,7 +256,7 @@ void ut_run() {
 	schedule();
 
 	//
-	// When we get here, there are no more user threads.
+	// When we get here, there are no more runnable user threads.
 	//
 	assert(is_list_empty(&ready_queue));
 	assert(number_of_threads == 0);
@@ -251,9 +276,11 @@ void ut_run() {
 void ut_exit() {
 	number_of_threads -= 1;	
 	
-	// avoid uthread app termination in case all remaining threads are waiting for I/O
-	async_dispatch();
-	
+	// awake all joiners
+	while(!is_list_empty(&running_thread->joiners)) {
+		uthread_t *joiner = container_of(remove_list_first(&running_thread->joiners), uthread_t, entry);
+		ut_activate(joiner);
+	}
 	internal_exit(running_thread, extract_next_thread());
 	
 	assert(!"Supposed to be here!");
@@ -268,7 +295,6 @@ void ut_yield() {
 		insert_list_last(&ready_queue, &running_thread->entry);
 		schedule();
 	}
-	
 }
 
 //
@@ -330,6 +356,9 @@ uthread_t* ut_create(void (*start_routine)(void *), void * arg) {
 	thread->stack = malloc(STACK_SIZE);
 	assert(thread != NULL && thread->stack != NULL);
 
+	// create joiners list
+	init_list_head(&thread->joiners);
+	
 	//
 	// Zero the stack for emotional confort.
 	//
@@ -404,4 +433,15 @@ uthread_t* ut_create(void (*start_routine)(void *), void * arg) {
 	ut_activate(thread);
 	
 	return thread;
+}
+
+//
+// wait for a specific thread termination
+//  
+//
+void ut_join(uthread_t * thread) {
+	
+	insert_list_last(&thread->joiners, &running_thread->entry);
+	schedule();
+	
 }

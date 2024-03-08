@@ -4,9 +4,8 @@
 #include <strings.h>
 #include "usynch.h"
 #include "waitblock.h"
-#include "aio.h"
+#include "aio-sockets.h"
 #include <fcntl.h>
-#include "log.h"
 #include <errno.h>
 
 // globals
@@ -62,17 +61,12 @@ static  int aio_rm_fd(int fd) {
  */
 
 static uthread_t* wakeup_aio_waiter(list_entry_t * waiters) {
- 	log("dispatch pending waiter!");
- 	
+ 	//printf("dispatch pending waiter!\n");
 	pending_opers--;
-	uthread_t* thread = ((waitblock_t *) remove_list_first(waiters))->thread;
-	if (ut_self() != thread) { 
-		log("async completion!"); 
-		ut_activate(thread); 
-	}
-	else {
-		logv("thread synchronously completed!", thread);
-	}
+	uthread_t* thread = 
+		container_of(remove_list_first(waiters), waitblock_t, entry)->thread;
+	if (ut_self() != thread) { /* printf("async completion!\n"); */ ut_activate(thread); }
+	//else printf("thread %p synchronously completed!\n", thread);
 	return  thread;
 }
 
@@ -84,11 +78,8 @@ static void wakeup_aio_waiters(list_entry_t * waiters) {
 }
 
 // block uthread on I/O queue
-static void aio_block(list_entry_t * waiters) {
-	waitblock_t wb;
-	wb.thread = ut_self();
-
-	insert_list_last(waiters, &wb.entry);
+static void aio_block(list_entry_t * waiters, waitblock_t *wb) {
+	insert_list_last(waiters, &wb->entry);
 	pending_opers++;
 	ut_deactivate();
 }
@@ -120,11 +111,11 @@ static aio_wait_state_t process_complete_reader(async_handle_t ah, int events) {
 aio_wait_state_t process_handle(async_handle_t ah, int events) {
 	int result = AIO_NONE;
 	if (events & (EPOLLIN | EPOLLERR | EPOLLHUP)) {
-		log("process pending read or accept!");
+		//printf("process pending read or accept!\n");
 		result =  process_complete_reader(ah, events);
 	}
 	if (events & (EPOLLOUT | EPOLLERR )) {	
-		log("process pending write!");
+		//printf("process pending write!\n");
 		int res =  process_complete_writer(ah, events);
 		if (result == AIO_NONE) result =  res;
 	}
@@ -138,9 +129,9 @@ aio_wait_state_t process_handle(async_handle_t ah, int events) {
  *  and 1 otherwise
  */
 static aio_wait_state_t process(int nready) {
+	//printf("%d descriptors are ready!\n", nready);
 	if (nready == 0) return AIO_NONE;
 	
-	logv("some descriptors are ready!", nready);
 	aio_wait_state_t result = AIO_ASYNC_WAIT; 
 	int some_dispatched = 0;
 
@@ -151,7 +142,7 @@ static aio_wait_state_t process(int nready) {
 			result = AIO_SYNCH_OPER;
 		}
 		if (res != AIO_NONE && res != AIO_ERROR) {
-		
+			//printf("some dispatched!\n");
 			some_dispatched ++;
 		}
 	}	
@@ -159,10 +150,7 @@ static aio_wait_state_t process(int nready) {
 		spurious_count++;
 		result = AIO_NONE;
 	}
-	else {
-	    logv("some dispatched!", some_dispatched);
-	}
-	 
+	//printf("nready=%d, some_dispatched= %d\n", nready, some_dispatched);
 	return result;	
 }
 
@@ -205,6 +193,7 @@ async_handle_t aio_get_input_handle() {
 
 void aio_rm_input_handle() {
 	aio_rm_fd(0);
+	
 }
 
 /**
@@ -213,11 +202,11 @@ void aio_rm_input_handle() {
  * (wich means the operation can immediatelly complete without blocking)
  */ 
 aio_wait_state_t aio_wait(int timeout) {
-	 
+	//printf("start aio_wait with timeout %d\n", timeout);
 	if (!aio_in_use()) return AIO_CLOSED;
 	int nready = epoll_wait(epoll_fd, rdy_set, EPOOL_MAX_FDS, timeout);
 	if (nready == -1) return AIO_ERROR;
-	 
+	//printf("end aio_wait\n");
 	return process(nready);	 
 }
 
@@ -296,42 +285,40 @@ async_handle_t aio_client_socket() {
 
 
 int aio_connect(async_handle_t cli_sock, struct sockaddr * srv_addr) {
-	
+	waitblock_t wb;
 	int cfd = aio_getfd(cli_sock);
 	
+	while(1) {
+		int res = connect(cfd, (struct sockaddr *) srv_addr, sizeof(struct sockaddr_in));
+		if (res != -1) break;
+		if(errno != EINPROGRESS) return -1;
 	
-	int res = connect(cfd, (struct sockaddr *) srv_addr, sizeof(struct sockaddr_in));
-	if (res != -1 || errno != EINPROGRESS) {
-		return res;
+		init_waitblock(&wb);
+		aio_block(&cli_sock->writers, &wb);	 
+		
+		return 0;
 	}
 	
-	aio_block(&cli_sock->writers);	 
-	
 	return 0;
- 
 }
 
 
 async_handle_t aio_accept(async_handle_t serv_sock, struct sockaddr * cliaddr, socklen_t *clilen) {
-
+	waitblock_t wb;
 	int fd = aio_getfd(serv_sock);
 	int cli_sock;
 	while(1) {
 		cli_sock = accept(fd, cliaddr, clilen);
-		if (cli_sock != -1) {
-			break;
-		}
+		if (cli_sock != -1) break;
 	 
-		if (errno != EAGAIN && errno != EWOULDBLOCK)  {
-			return NULL;
-		}
-		
-		aio_block(&serv_sock->readers);	 	 
+		if(errno != EAGAIN ) return NULL;
+		init_waitblock(&wb);
+		aio_block(&serv_sock->readers, &wb);	 
+			 
 	}
-	
 	async_handle_t ah;
 	if ((ah=aio_add_fd(cli_sock, EPOLLIN | EPOLLOUT | EPOLLERR)) == NULL) {
-	 
+		printf("error adding conection socket to epoll\n");
 		close(cli_sock);
 		return NULL;
 	}
@@ -342,18 +329,17 @@ async_handle_t aio_accept(async_handle_t serv_sock, struct sockaddr * cliaddr, s
 /**
  * (system) asynchronous read
  */
-int aio_read(async_handle_t ah, void *buf, int size) {
-	
+int aio_read(async_handle_t ah, void *buf, int size, int try) {
+	waitblock_t wb;
 	int fd = aio_getfd(ah);
 	while(1) {
 		int res = read(fd, buf, size);
-		if (res != -1 || (errno != EAGAIN && errno != EWOULDBLOCK)) {
-			return res;
-		}
-	 	
-		log("reader wait for write readiness!");
+		if (res != -1) return res;
 	 
-		aio_block(&ah->readers);	 
+		if(errno != EAGAIN ) return -1;
+		
+		init_waitblock(&wb);
+		aio_block(&ah->readers, &wb);	 
 			 
 	}
 }
@@ -362,18 +348,17 @@ int aio_read(async_handle_t ah, void *buf, int size) {
  * (system) asynchronous write 
  */
 int aio_write(async_handle_t ah, void *buf, int size) {
-	
+	waitblock_t wb;
 	int fd = aio_getfd(ah);
 	while(1) {
 		int res = write(fd, buf, size);
-		
-		if (res != -1 || (errno != EAGAIN && errno != EWOULDBLOCK) ) {
-			return res;
-		}
-		
-		log("writer wait for write readiness!");
-	
-		aio_block(&ah->writers);	 	 
+		if (res != -1) return res;
+	 
+		//printf("ERRNO=%d\n", errno);
+		if(errno != EAGAIN ) return -1;
+		//printf("\nwait for write readiness!\n\n");
+		init_waitblock(&wb);
+		aio_block(&ah->writers, &wb);	 	 
 	}
  
 }

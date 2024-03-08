@@ -18,9 +18,8 @@
 #include <unistd.h>
 
 #include "uthread.h"
-#include "aio.h"
+#include "aio-sockets.h"
 #include "list.h"
-#include "log.h"
 
 //////////////////////////////////////
 //
@@ -143,22 +142,13 @@ static inline aio_wait_state_t async_dispatch_with_timeout(int timeout) {
 }
 
 static aio_wait_state_t async_dispatch() {
-	
-	log("enter async_dispatch!");
+	//printf("enter async_dispatch!\n");
 	aio_wait_state_t result = AIO_NONE;
-
-	
-	if (is_list_empty(&ready_queue)) {
-		while (result == AIO_NONE && aio_in_use() && is_list_empty(&ready_queue)) {
-			result = async_dispatch_with_timeout(INFINITE);
-		}
-
-		log("leave async_dispatch!");
-		
+	while (result == AIO_NONE && aio_in_use() && is_list_empty(&ready_queue)) {
+		result = async_dispatch_with_timeout(INFINITE);
 	}
-	else {
-		if (aio_pending_count() > 10) result =  aio_wait(0);
-	}
+	//else if (aio_pending_count() > 10) return aio_dispatch_with_timeout(100);
+	//printf("leave async_dispatch!\n");
 	return result;
 }
 
@@ -192,7 +182,7 @@ static inline void schedule () {
 void ut_init() {
 	init_list_head(&ready_queue);
 	if (aio_init() == -1) {
-		log("error creating epoll object!");
+		fprintf(stderr, "error creating epoll object!\n");
 	}
 }
 
