@@ -9,12 +9,13 @@
 #include "chrono.h"
 
 #include "echo_service.h"
-#include "aio-sockets.h"
+#include "aio.h"
 
 static async_handle_t sfd;
 static bool terminated = false;
 static char welcome_msg[] = "welcome, new client!\n";
-static char bye_msg[] = "bye\n";
+static char client_bye_msg[] = "bye\n";
+static char server_bye_msg[] = "bye, till next visit!\n";
 
 // uthread for attend termination
 void watchdog(void *arg) {
@@ -26,15 +27,6 @@ void watchdog(void *arg) {
 	aio_rm_input_handle();
 }
 
-void show_ascii(char *msg) {
-	int i= 0;
-	while(msg[i] != 0) {
-		int code = msg[i];
-		printf("%d ", code);
-		++i;
-	}
-	printf("\n");
-}
 
 void process_connection(async_handle_t cfd) {
 	echo_msg_t msg;
@@ -43,10 +35,14 @@ void process_connection(async_handle_t cfd) {
 	aio_write(cfd, welcome_msg, strlen(welcome_msg));
 	while ((nread = aio_read(cfd, msg, sizeof(echo_msg_t))) > 0 ) {
 		msg[nread] = 0;
-		aio_write(cfd, msg, nread);
 		
-		if (strcmp(bye_msg, msg) == 0) 
+		if (strcmp(client_bye_msg, msg) != 0) {
+			aio_write(cfd, msg, nread);
+		}
+		else {
+			aio_write(cfd, server_bye_msg, strlen(server_bye_msg));
 		    break;
+		}
 	}
 	//printf("end session!\n");
 	aio_close(cfd);		 

@@ -8,22 +8,16 @@
 #include <unistd.h>
 #include <errno.h>
  
-
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
-#include "aio-sockets.h"
+#include "aio.h"
 #include "uthread.h"
-
 #include "chrono.h"
 #include "echo_service.h"
- 
-#define MAX_SOCK_NAME 256
-#define CLIENT_SOCK_PREFIX "sock_client_"
+#include "log.h"
+
 
 #define NITERS 10
 #define MIN_CLIENT_START 20
-#define MAX_CLIENT_START 100
+#define MAX_CLIENT_START 50
 
 int terminated = 0;
 int remaining;
@@ -32,17 +26,6 @@ int started;
 
 void start_wait_rand() {
 	usleep( rand() % (MAX_CLIENT_START - MIN_CLIENT_START) + MIN_CLIENT_START);
-}
-
-void stats(void *arg) {
-	chrono_t start = chrono_start();
-	while (!terminated) {
-		while (chrono_micros(start) < 1000000) ut_yield();
-		printf("pending count = %d\n", aio_pending_count());
-		printf("spurious count = %ld\n", aio_spurious_count());
-		start = chrono_start();
-	}
-		
 }
 
 void echo_client(void *arg) {
@@ -63,13 +46,14 @@ void echo_client(void *arg) {
 	
 		
 	if (aio_connect(cfd, (struct sockaddr *) &srv_addr)== -1) {
-		printf("Error connecting socket on client %d\n", client_id);
+		fprintf(stderr, "Error connecting socket on client %d\n", client_id);
 		aio_close(cfd);
 		return;
 	}
 	start_wait_rand();
-	if (++started == nclients)
-		printf("\nall started!\n\n");
+	if (++started == nclients) {
+		log("\nall started!\n");
+	}
  
 	echo_msg_t buf;
  
@@ -108,13 +92,11 @@ int main(int argc, char *argv[]) {
 	
 	chrono_t chron = chrono_start();
 	
-	//ut_create(stats, NULL);
 	remaining = nclients;
 	for(int i=0; i < nclients; ++i) {
 		ut_create(echo_client, (void *) ((size_t) i));
 	}
 
-	
 	ut_run();
 	
 	printf("%d clients done in %ld micros!\n", nclients, chrono_micros(chron));

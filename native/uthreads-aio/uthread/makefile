@@ -1,7 +1,7 @@
 all: libuthread.so 
 
-libuthread.so: uthread.o event.o semaphore.o ctxswitch.o aio-sockets.o
-	gcc -o libuthread.so -shared uthread.o event.o semaphore.o aio-sockets.o ctxswitch.o
+libuthread.so: uthread.o event.o semaphore.o ctxswitch.o aio.o
+	gcc -o libuthread.so -shared uthread.o event.o semaphore.o aio.o ctxswitch.o
 
  
 
@@ -26,8 +26,8 @@ event.o: event.c
 semaphore.o: semaphore.c
 	gcc -c -g -fPIC -Wall -I ../include semaphore.c 
 
-aio-sockets.o: aio-sockets.c
-	gcc -c -g -fPIC -Wall -I ../include aio-sockets.c 
+aio.o: aio.c
+	gcc -c -g -fPIC -Wall -I ../include aio.c 
 
 install:
 	cp libuthread.so /usr/local/lib

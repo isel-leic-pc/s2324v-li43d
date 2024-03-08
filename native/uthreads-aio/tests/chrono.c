@@ -3,8 +3,6 @@
 #include <time.h>
 #include "chrono.h"
 
-
-
 chrono_t chrono_start() {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
