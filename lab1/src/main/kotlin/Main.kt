@@ -19,6 +19,7 @@ fun main() {
         repeat(10) { action->
             println("simulating some word done by red thread $id, action $action")
         }
+
     }
     val greenThreads = launchSomeThreads(NGREENS)  { id->
         repeat(20) { action ->

@@ -23,12 +23,14 @@ class HashMapsHazardTests {
     /**
      * do in parallel some action
      */
-    private fun parallelAction(action : () -> Unit) : Long {
+    private fun parallelMapFiller(updater : (Int) -> Unit) : Long {
         return measureTimeMillis {
             (0..<N_THREADS)
                 .map {
                     thread {
-                        action()
+                        for (i in 1..N_KEYS) {
+                            updater(i)
+                        }
                     }
                 }.forEach { thread ->
                     thread.join()
@@ -56,12 +58,10 @@ class HashMapsHazardTests {
     fun countWithBasicMapTest() {
         val basic = HashMap<Int, AtomicInteger>()
 
-        val millis = parallelAction {
-            for (i in 1..N_KEYS) {
-                val value = basic[i] ?: AtomicInteger()
-                value.incrementAndGet()
-                basic[i] = value
-            }
+        val millis = parallelMapFiller { key ->
+            val value = basic[key] ?: AtomicInteger()
+            value.incrementAndGet()
+            basic[key] = value
         }
         logger.error ("basic hashMap fill done in $millis ms!")
         Assertions.assertEquals(N_THREADS * N_KEYS, hashSumValues(basic))
@@ -72,12 +72,10 @@ class HashMapsHazardTests {
         val synchMap: MutableMap<Int, AtomicInteger> =
             Collections.synchronizedMap(HashMap())
 
-        val millis = parallelAction {
-            for (i in 1..N_KEYS) {
-                val value = synchMap[i] ?: AtomicInteger()
-                value.incrementAndGet()
-                synchMap[i] = value
-            }
+        val millis = parallelMapFiller { key->
+            val value = synchMap[key] ?: AtomicInteger()
+            value.incrementAndGet()
+            synchMap[key] = value
         }
         logger.error("synchronized hashMap fill done in $millis ms!")
         Assertions.assertEquals(N_THREADS * N_KEYS, hashSumValues(synchMap))
@@ -88,12 +86,10 @@ class HashMapsHazardTests {
         val ourSynchroMap = HashMap<Int, Int>()
         val mutex = ReentrantLock()
 
-        val millis = parallelAction {
-            for (i in 1..N_KEYS) {
-                mutex.withLock {
-                    val value = ourSynchroMap[i] ?: 0
-                    ourSynchroMap[i] = value + 1
-                }
+        val millis = parallelMapFiller { key ->
+            mutex.withLock {
+                val value = ourSynchroMap[key] ?: 0
+                ourSynchroMap[key] = value + 1
             }
         }
 
@@ -105,12 +101,10 @@ class HashMapsHazardTests {
     fun countWithConcurrentMapTest() {
         val concurrentMap: MutableMap<Int, AtomicInteger> = ConcurrentHashMap()
 
-        val millis = parallelAction {
-            for (key in 1..N_KEYS) {
-                concurrentMap
-                    .computeIfAbsent(key) { value -> AtomicInteger() }
-                    .incrementAndGet()
-            }
+        val millis = parallelMapFiller { key ->
+            concurrentMap
+                .computeIfAbsent(key) { value -> AtomicInteger() }
+                .incrementAndGet()
         }
         logger.error("concurrent hashMap fill done in $millis ms!")
         Assertions.assertEquals(N_THREADS * N_KEYS, hashSumValues(concurrentMap))
