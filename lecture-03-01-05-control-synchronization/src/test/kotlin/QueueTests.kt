@@ -1,11 +1,11 @@
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Test
 import pt.isel.pc.controlsynchro.Queue
 import kotlin.concurrent.thread
-import kotlin.test.Test
-import kotlin.test.assertEquals
 
 class QueueTests {
 
-    @org.junit.jupiter.api.Test
+    @Test
     fun `a single consumer and producer simple test`() {
         val queue = Queue<Int>(1)
         var result : Int = 0
@@ -25,7 +25,7 @@ class QueueTests {
         assertEquals(2, result)
     }
 
-    @org.junit.jupiter.api.Test
+    @Test
     fun `multiple use with a single consumer and producer test`() {
         val queue = Queue<Int>(10)
         val consumedValues = mutableSetOf<Int>()
