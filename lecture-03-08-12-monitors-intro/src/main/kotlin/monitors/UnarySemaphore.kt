@@ -5,10 +5,9 @@ import kotlin.concurrent.withLock
 
 class UnarySemaphore(private var permits : Int = 0) {
     val monitor = ReentrantLock()
-    val availablePermits = monitor.newCondition()
+    val permitsAvailable = monitor.newCondition()
 
     fun acquire() {
-
         monitor.withLock {
             // fast path
             if (permits > 0) {
@@ -17,7 +16,7 @@ class UnarySemaphore(private var permits : Int = 0) {
             }
             // wait path
             do {
-                availablePermits.await()
+                permitsAvailable.await()
                 if (permits > 0) {
                     --permits
                     return
@@ -30,7 +29,7 @@ class UnarySemaphore(private var permits : Int = 0) {
     fun release() {
         monitor.withLock {
             ++permits
-            availablePermits.signal()
+            permitsAvailable.signal()
         }
     }
 }

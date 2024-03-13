@@ -5,6 +5,10 @@ import java.util.concurrent.Semaphore
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
+/**
+ * a FIFO queue with blocking put when full,
+ * and blocking get when empty
+ */
 class Queue<T>(private val capacity : Int) {
     private val list = LinkedList<T>()
     private val mutex = ReentrantLock()
@@ -19,14 +23,12 @@ class Queue<T>(private val capacity : Int) {
         canGet.release()
     }
 
-
     fun get() : T {
         canGet.acquire()
-        val elem =  mutex.withLock {
+        return mutex.withLock {
             list.removeFirst()
         }.also {
             spaceAvaiable.release()
         }
-        return elem
     }
 }
