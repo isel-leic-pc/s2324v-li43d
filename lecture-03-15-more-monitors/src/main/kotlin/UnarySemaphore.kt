@@ -4,15 +4,15 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
 
-class GenericSemaphore(private var permits: Int) {
+class UnarySemaphore(private var permits : Int = 0) {
     val monitor = ReentrantLock()
     val permitsAvailable = monitor.newCondition()
 
-    fun acquire(p: Int, timeout: Duration) : Boolean {
+    fun acquire(timeout : Duration) : Boolean  {
         monitor.withLock {
             // fast path
-            if (permits >= p) {
-                permits -= p
+            if (permits > 0) {
+                --permits
                 return true
             }
 
@@ -21,32 +21,33 @@ class GenericSemaphore(private var permits: Int) {
             do {
                 try {
                     timeoutNanos = permitsAvailable.awaitNanos(timeoutNanos)
-                    if (permits >= p) {
-                        permits -= p
+                    if (permits > 0) {
+                        --permits
                         return true
                     }
                     if (timeoutNanos <= 0) return false
                 }
                 catch (e: InterruptedException) {
-                    // since the acquirers are signaled in broadcast
-                    // and we have not changed synchronization state
-                    // we could omit this try catch block, since
-                    // we have nothing to do here!
+                    // since acquirers are signaled
+                    // individually we need to regenerate a signal
+                    // if there permits, because we could been notified and
+                    // interrupted simultaneously,
+                    // and there is a risk of losing the notification,
+                    // a thing that could never happen
+                    if (permits > 0) {
+                        permitsAvailable.signal()
+                    }
                     throw e
                 }
-
             }
             while(true)
         }
     }
 
-    fun release(p: Int) {
+    fun release() {
         monitor.withLock {
-            permits += p
-            // we must do a broadcast signal
-            // since we have no information about the requested permits
-            // by the waiting acquirers!
-            permitsAvailable.signalAll()
+            ++permits
+            permitsAvailable.signal()
         }
     }
 }
