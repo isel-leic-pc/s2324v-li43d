@@ -4,6 +4,7 @@ import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 import kotlin.time.Duration
 
+// a monitor semaphore with n-ary releases and acquires
 class GenericSemaphore(private var permits: Int) {
     val monitor = ReentrantLock()
     val permitsAvailable = monitor.newCondition()
