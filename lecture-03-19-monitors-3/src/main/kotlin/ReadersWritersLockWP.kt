@@ -16,6 +16,7 @@ class ReadersWritersLockWP {
     var nReaders = 0
     var writing = false
 
+    @Throws(InterruptedException::class)
     fun startRead(timeout: Duration) : Boolean  {
         monitor.withLock {
             // fast path
@@ -59,6 +60,7 @@ class ReadersWritersLockWP {
         }
     }
 
+    @Throws(InterruptedException::class)
     fun startWrite(timeout: Duration) : Boolean  {
         monitor.withLock {
             // fast path

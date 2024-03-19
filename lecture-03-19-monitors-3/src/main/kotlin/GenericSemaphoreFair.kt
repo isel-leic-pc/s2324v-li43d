@@ -7,6 +7,7 @@ import kotlin.time.Duration
 class GenericSemaphoreFair(private var permits: Int) {
     val monitor = ReentrantLock()
 
+    @Throws(InterruptedException::class)
     fun acquire(p: Int, timeout: Duration) : Boolean {
         monitor.withLock {
             // fast path

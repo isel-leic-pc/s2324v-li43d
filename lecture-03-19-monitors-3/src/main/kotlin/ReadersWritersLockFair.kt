@@ -12,6 +12,7 @@ class ReadersWritersLockFair {
     var nReaders = 0
     var writing = false
 
+    @Throws(InterruptedException::class)
     fun startRead(timeout: Duration) : Boolean  {
         monitor.withLock {
            TODO()
@@ -24,6 +25,7 @@ class ReadersWritersLockFair {
         }
     }
 
+    @Throws(InterruptedException::class)
     fun startWrite(timeout: Duration) : Boolean  {
         monitor.withLock {
             TODO()
