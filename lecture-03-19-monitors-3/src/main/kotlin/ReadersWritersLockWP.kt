@@ -15,12 +15,13 @@ class ReadersWritersLockWP {
     val canWrite = monitor.newCondition()
     var nReaders = 0
     var writing = false
+    var waitingWriters = 0
 
     @Throws(InterruptedException::class)
     fun startRead(timeout: Duration) : Boolean  {
         monitor.withLock {
             // fast path
-            if (!writing) {
+            if (!writing && waitingWriters == 0) {
                 nReaders++
                 return true
             }
@@ -55,7 +56,9 @@ class ReadersWritersLockWP {
         monitor.withLock {
             --nReaders
             if (nReaders == 0) {
-                canWrite.signal()
+                if (waitingWriters > 0) {
+                   canWrite.signal()
+                }
             }
         }
     }
@@ -64,16 +67,18 @@ class ReadersWritersLockWP {
     fun startWrite(timeout: Duration) : Boolean  {
         monitor.withLock {
             // fast path
-            if (nReaders == 0 && !writing) {
+            if (nReaders == 0 && !writing && waitingWriters == 0) {
                 writing = true
                 return true
             }
             // wait path
             var timeoutNanos = timeout.inWholeNanoseconds
+            waitingWriters++
             do {
                 try {
                     timeoutNanos = canWrite.awaitNanos(timeoutNanos)
                     if (nReaders == 0 && !writing) {
+                        waitingWriters--
                         writing = true
                         return true
                     }
@@ -102,8 +107,13 @@ class ReadersWritersLockWP {
             // since we have no state to know
             // the actual situation!
             // With more information, we could do better
-            canRead.signalAll()
-            canWrite.signal()
+            if (waitingWriters > 0) {
+                canWrite.signal()
+            }
+            else {
+                canRead.signalAll()
+            }
+
         }
     }
 }

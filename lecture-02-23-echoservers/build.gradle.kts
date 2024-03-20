@@ -6,11 +6,7 @@
  */
 
 plugins {
-    // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
-    alias(libs.plugins.jvm)
-
-    // Apply the java-library plugin for API and implementation separation.
-    `java-library`
+    kotlin("jvm") version "1.9.20"
 }
 
 repositories {
@@ -19,23 +15,11 @@ repositories {
 }
 
 dependencies {
-    // Use the Kotlin JUnit 5 integration.
-    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
-
-    // Use the JUnit 5 integration.
-    testImplementation(libs.junit.jupiter.engine)
-
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-
-
-    // This dependency is used internally, and not exposed to consumers on their own compile classpath.
-    //implementation(libs.guava)
-
+    testImplementation("org.jetbrains.kotlin:kotlin-test")
     testImplementation("org.slf4j:slf4j-simple:1.8.0-beta4")
     implementation("org.slf4j:slf4j-simple:1.8.0-beta4")
 
     implementation("io.github.microutils:kotlin-logging:1.12.5")
-
     implementation(project(":utils"))
 }
 
