@@ -17,7 +17,7 @@ class NodeList<T> : Iterable<T> {
         }
 
         override fun next(): T {
-            if (!hasNext()) throw IllegalStateException()
+            if (!hasNext()) throw NoSuchElementException()
             val currVal = current.value!!
             current = current.next
             return currVal
