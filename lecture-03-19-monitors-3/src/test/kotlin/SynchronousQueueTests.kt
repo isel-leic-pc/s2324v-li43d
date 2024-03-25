@@ -3,9 +3,12 @@ import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
 import pt.isel.pc.monitors.SynchronousQueue
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
+import kotlin.math.min
+import kotlin.random.Random
 import kotlin.test.fail
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -35,7 +38,7 @@ class SynchronousQueueTests {
 
 
     @Test
-    fun `simple rendezvous deliver with SinchronousQueueMultiOffer`() {
+    fun `simple rendezvous deliver with SinchronousQueueMultiPoll`() {
         val squeue = SynchronousQueueMultiPoll<Int>()
 
         val expected = listOf(2)
@@ -56,72 +59,51 @@ class SynchronousQueueTests {
         Assertions.assertEquals(expected, result)
     }
 
+
     /**
-     * A more complicated test that should be done after the simple tests
-     * already succeed
+     * A more complicated test that should be done after the simple tests have succeeded
      * In this case we have an arbitrary number of enqueuers and dequeuers
-     * the test parametrizes the number of each.
-     * Initially it should be parametrized to the most simple situation, NREADERS=NWRITERS=1
-     * Varying capacity can test scenarios where enqueuers need to block
+     * The test parametrizes the number of each.
      * Note that this code could be refactored to an auxiliary method that
      * could be used to build tests for different scenarios.
-     * Something like this:
-     *   private fun <T>  exec_bmq_test(nwriters : Int = 1,
-     *                                  nreaders : Int = 1,
-     *                                  capacity : Int = 1,
-     *                                  colSupplier : () -> Collection<T>)
-     *                                      : Collection<T>
      */
-    /*
     @Test
     fun blocking_synchronous_queue_multi_poll_with_multiple_senders_receivers() {
-
         val NWRITERS = 4
-        val NREADERS = 2
+        val NREADERS = 3
 
-
-        val listOfLists = listOf(
-            listOf(1, 2, 3),
-            listOf(4, 5),
-            listOf(6),
-            listOf(7, 8, 9, 10),
-            listOf(11, 12, 13),
-            listOf(14, 15, 16, 17),
-            listOf(18, 19, 20)
-        )
-
-
-        val data_size =
-            listOfLists
-                .flatMap { it }
-                .count()
+        val numbers_range = (1..1000)
+        val input_size = numbers_range.count()
 
         val msgQueue = SynchronousQueueMultiPoll<Int>()
-        val resultSet = ConcurrentHashMap.newKeySet<Int>()
+        val resultArray =  Array<List<Int>?>(input_size) { null }
 
         // this index use is protected by a mutex
         // in oprder to support multiple writers
-        var writeInputIndex = 0
-        val mutex = ReentrantLock()
+        var writeIndex = 1
 
-        val expectedSet = (1..20).toSet()
+        // this index use is protected by a mutex
+        // in order to support multiple writers
+        var readIndex = 1
 
+        var readCount = AtomicInteger()
+        val writersMutex = ReentrantLock()
+        val readersMutex = ReentrantLock()
         val writerThreads = (1..NWRITERS)
             .map {
                 thread {
                     logger?.info("start writer")
                     while (true) {
-                        var localIdx = listOfLists.size
-                        mutex.withLock {
-                            if (writeInputIndex < listOfLists.size) {
-                                localIdx = writeInputIndex++
+                        var localIdx = 0
+                        writersMutex.withLock {
+                            if (writeIndex <= input_size) {
+                                localIdx = writeIndex++
                             }
                         }
-                        if (localIdx < listOfLists.size) {
-                            val value = listOfLists.get(localIdx)
-                            logger?.info("writer try send $value")
-                            if (msgQueue.offer(value, Duration.INFINITE))
-                                logger?.info("writer send $value")
+                        if (localIdx > 0 && localIdx <= input_size) {
+                            logger?.info("writer try send $localIdx")
+                            if (msgQueue.offer(localIdx, Duration.INFINITE))
+                                logger?.info("writer send $localIdx")
                         } else {
                             break;
                         }
@@ -131,22 +113,35 @@ class SynchronousQueueTests {
                 }
             }
 
-        val readerThreads = (1..NREADERS).map {
+        val readerThreads =  (0..< NREADERS).map {
             thread {
                 logger?.info("start reader")
-                while (true) {
-                    val value =
-                        msgQueue.poll(3000.milliseconds) ?: break
-                    if (resultSet.add(value))
-                        logger?.info("reader get $value")
+                val random = Random(it)
+                while(true) {
+                    var size = 0
+
+                    readersMutex.withLock {
+
+                        if (readIndex <= input_size) {
+                            size = min(input_size -readIndex + 1,
+                                random.nextInt(1, 5))
+                            readIndex+= size
+                        }
+                    }
+                    if (size == 0) break
+                    val list =
+                        msgQueue.poll(size, 100.milliseconds)
+                    resultArray[readCount.getAndIncrement()] = list
+                    logger?.info("reader get value $list")
                 }
+
                 logger?.info("end reader")
             }
         }
 
 
         // wait for writers termination (with a timeout)
-        for (wt in writerThreads) {
+        for(wt in writerThreads) {
             wt.join(5000)
             if (wt.isAlive) {
                 fail("too much execution time for writer thread")
@@ -154,7 +149,7 @@ class SynchronousQueueTests {
         }
 
         // wait for readers termination (with a timeout)
-        for (rt in readerThreads) {
+        for(rt in readerThreads) {
             rt.join(5000)
             if (rt.isAlive) {
                 fail("too much execution time for reader thread")
@@ -162,10 +157,14 @@ class SynchronousQueueTests {
         }
 
         // final assertions
+        val expectedList = numbers_range.toList()
 
-        Assertions.assertEquals(data_size, resultSet.size)
-        Assertions.assertEquals(expectedSet, resultSet);
+        val result = resultArray.toList().flatMap {
+            it ?: listOf()
+        }.sorted()
+
+
+        Assertions.assertEquals(expectedList.size, result.size)
+        Assertions.assertEquals(expectedList, result);
     }
-
-         */
 }
